@@ -40,9 +40,12 @@ _.extend(NodeChangePacket, {
 	getValue: function() {
 		return this.data.val;
 	},
-	setValue: function(val) {
-		this.data = {};
+	setValue: function(val, node) {
+		if (!this.hasOwnProperty('data'))
+			this.data = {};
 		this.data.val = val;
+		if (node)
+			this.data.node = node;
 	}
 });
 
@@ -70,6 +73,18 @@ _.extend(BulkPacket, {
 			val = val.getValue();
 		this.setValue(val);
 		this.length = this.data.length;
+	}
+});
+
+ChannelPacket = Object.create(Packet);
+_.extend(ChannelPacket, {
+	type: 'ChannelPacket',
+	channel: null,
+	setChannel: function(channel) {
+		this.channel = channel;
+	},
+	getChannel: function(channel) {
+		return this.channel;
 	}
 });
 
@@ -300,6 +315,14 @@ _.extend(Node, {
 	init: function() {
 		Stream.init.call(this);
 		this._parent = null;
+	},
+	convertToPacket: function(val) {
+		if (!isPacket(val)) {
+			var packet = Object.create(NodeChangePacket);
+			packet.setValue(val, this);
+			val = packet;
+		}
+		return val;
 	},
 	setParent: function(parent) {
 		if (this._parent)
@@ -710,3 +733,29 @@ isPacket = function(obj) {
 // a.setVal(1);
 // b.setVal(1);
 // c.setVal(1);
+
+LogIt = Object.create(Stream);
+_.extend(LogIt, {
+	init: function(a){
+		this.a = a
+		Stream.init.call(this);
+	},
+	setVal:function(val){
+		console.log(this.a, val.getValue());
+		return Stream.setVal.call(this, val);
+	}
+});
+makeLogger = makeFactory(LogIt);
+var json = {
+	a: 1
+};
+getAdder = makeFactory(Transform, function(a) {
+	return a + 1;
+});
+a = JSONtoNodes(json);
+b = cloneWithLinks(a);
+// Plumber.weld(b.getChild('a'), getAdder());
+a.getChild('a').pipe(makeLogger(1));
+b.getChild('a').pipe(makeLogger(2));
+a.getChild('a').setVal(2);
+
