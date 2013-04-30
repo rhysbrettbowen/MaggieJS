@@ -89,7 +89,23 @@ You will want to override the setValue and getValue functions. These are always 
 
 ##Nodes##
 
-Nodes represent your data, they can be easily converted to and from json data. Each data node is a stream which allows easy manipulation of the data and the ability to tie those changes to other streams.
+Nodes represent your data, they can be easily converted to and from json data. Each data node is a stream which allows easy manipulation of the data and the ability to tie those changes to other streams. Look under Utilities for transforming data to nodes.
+
+###contains###
+
+check if a node contains another node in it's tree
+
+###getPath###
+
+dot delimitted path from the head node
+
+###getPathTo###
+
+the dot delimitted path to a node that is somewhere under the current node
+
+###getChild###
+
+takes dot delimitted path to grab a child
 
 ##Plumber##
 
