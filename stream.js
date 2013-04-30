@@ -606,7 +606,7 @@ Debounce = Object.create(Stream);
 _.extend(Debounce, {
 	init: function(time) {
 		this.setVal = _.debounce(Stream.setVal, time);
-		return Steam.init.call(this);
+		return Stream.init.call(this);
 	}
 });
 
@@ -614,15 +614,21 @@ Throttle = Object.create(Stream);
 _.extend(Throttle, {
 	init: function(time) {
 		this.setVal = _.throttle(Stream.setVal, time);
-		return Steam.init.call(this);
+		return Stream.init.call(this);
 	}
 });
 
 Defer = Object.create(Stream);
 _.extend(Defer, {
 	init: function(time) {
-		this.setVal = _.delay(Stream.setVal, time);
-		return Steam.init.call(this);
+		this.time = time;
+		return Stream.init.call(this);
+	},
+	setVal: function() {
+		var args = _.toArray(arguments);
+		_.delay(_.bind(function() {
+			Stream.setVal.apply(this, args);
+		}, this), this.time);
 	}
 });
 
@@ -655,6 +661,27 @@ _.extend(Collect, {
 			}, 0);
 		}
 		_this._cache.addValue(val);
+	}
+});
+
+Splitter = Object.create(Stream);
+_.extend(Splitter, {
+	init: function() {
+		Stream.init.call(this);
+		this.filters = [];
+	},
+	addGate: function(fn, stream) {
+		var filter = Object.create(Filter);
+		filter.init(fn);
+		this.pipe(filter).pipe(stream);
+		this.filters.push(filter);
+	},
+	dispose: function() {
+		for (var i = 0; i < this.filters.length; i++) {
+			this.filters[i].dispose();
+		}
+		this.filters = null;
+		Stream.dispose.call(this);
 	}
 });
 
@@ -824,3 +851,32 @@ a.getChild('a').setVal(2);
 
 console.log(nodes.getChild('a.2').getPath())
 console.log(nodes.getChild('a').getPathTo(nodes.getChild('a.2.2')))
+
+var Leaf = Object.create(Stream);
+_.extend(Leaf, {
+	init: function(el) {
+		Stream.init.call(this);
+		this.el = el;
+		var _this = this;
+		el.addEventListener('change', function(el) {
+			_this.setVal(parseInt(el.target.value));
+		});
+	},
+	transform: function(val) {
+		if (this.el.value == val)
+			return;
+		this.el.value = val.getValue();
+		return val;
+	}
+});
+makeLeaf = makeFactory(Leaf);
+
+var inputs = document.getElementsByTagName('INPUT');
+
+var l = makeLeaf(inputs[0]);
+var l2 = makeLeaf(inputs[1]);
+
+var makeDefer = makeFactory(Defer);
+
+l.pipe(makeDefer(1000)).pipe(getAdder()).pipe(l);
+l.pipe(getAdder()).pipe(l2);
