@@ -19,7 +19,11 @@ Packet = {
 		var clone = Object.create(Object.getPrototypeOf(this));
 		for (var i in this) {
 			if (this.hasOwnProperty(i))
-				clone[i] = this;
+				clone[i] = this[i];
+		}
+		clone.data = {};
+		for (i in this.data) {
+			clone.data[i] = this.data[i];
 		}
 		return clone;
 	}
@@ -73,7 +77,7 @@ _.extend(BulkPacket, {
 			val = val.getValue();
 		this.setValue(val);
 		this.length = this.data.length;
-	}
+	},
 });
 
 ChannelPacket = Object.create(Packet);
@@ -270,7 +274,7 @@ Plumber = {
 			if (Plumber.showPiping) {
 				console.log(stream.cid + ' -> ' + val + ' -> ' + id);
 			}
-			Plumber._streams[id].setVal(val);
+			Plumber._streams[id].setVal(val.clone());
 		});
 	},
 	weld: function() {
@@ -312,17 +316,10 @@ Plumber = {
  */
 Node = Object.create(Stream);
 _.extend(Node, {
+	defaultPacket: NodeChangePacket,
 	init: function() {
 		Stream.init.call(this);
 		this._parent = null;
-	},
-	convertToPacket: function(val) {
-		if (!isPacket(val)) {
-			var packet = Object.create(NodeChangePacket);
-			packet.setValue(val, this);
-			val = packet;
-		}
-		return val;
 	},
 	setParent: function(parent) {
 		if (this._parent)
@@ -754,7 +751,7 @@ getAdder = makeFactory(Transform, function(a) {
 });
 a = JSONtoNodes(json);
 b = cloneWithLinks(a);
-// Plumber.weld(b.getChild('a'), getAdder());
+Plumber.weld(b.getChild('a'), getAdder());
 a.getChild('a').pipe(makeLogger(1));
 b.getChild('a').pipe(makeLogger(2));
 a.getChild('a').setVal(2);

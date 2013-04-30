@@ -91,6 +91,77 @@ You will want to override the setValue and getValue functions. These are always 
 
 Nodes represent your data, they can be easily converted to and from json data. Each data node is a stream which allows easy manipulation of the data and the ability to tie those changes to other streams.
 
+##Plumber##
+
+The Plumber is what handles all the piping between streams. It is a central place where a map is kept of all the linkages. This keeps object references out of streams so there is a central place to clean everything up. Because of this it also has some special abilities:
+
+###Pipe###
+
+usually called through a stream, will pipe streams through each other
+
+###insertBefore###
+
+will insert a stream before another stream, so any existing streams flowing in to it will be redirected through that stream first. WIll only work for existing streams, new streams will have to be piped to the new stream.
+
+###insertAfter###
+
+just like insertBefore but will pipe the output of the stream through this before going to any streams after
+
+###registerStream###
+
+called automatically by the Stream init function
+
+###findPaths###
+
+will give you a list of paths a packet could take between two streams
+
+###killPath###
+
+will kill a piping between two streams (not the whole path, use only for direct links)
+
+###killStream###
+
+called when a stream is disposed, kills it's links
+
+###flow###
+
+what actually passes along the (clones) of packets. Called automatically by the Streams send method
+
+###weld###
+
+gives the ability to weld together several streams in to a single stream. Any connections to the existing streams will be redirected to flow through the welded stream. This is handy for use on models which need formatting. For instance we could create a model that always has a parameter which is 1 more than it's original:
+
+```
+LogIt = Object.create(Stream);
+_.extend(LogIt, {
+	init: function(a){
+		this.a = a
+		Stream.init.call(this);
+	},
+	setVal:function(val){
+		console.log(this.a, val.getValue());
+		return Stream.setVal.call(this, val);
+	}
+});
+makeLogger = makeFactory(LogIt);
+var json = {
+	a: 1
+};
+getAdder = makeFactory(Transform, function(a) {
+	return a + 1;
+});
+a = JSONtoNodes(json);
+b = cloneWithLinks(a);
+Plumber.weld(b.getChild('a'), getAdder());
+a.getChild('a').pipe(makeLogger(1));
+b.getChild('a').pipe(makeLogger(2));
+a.getChild('a').setVal(2);
+//2 3
+//1 3
+```
+
+##Utilities##
+
 ###JSONtoNodes###
 
 will convert your json to nodes
@@ -102,6 +173,18 @@ will convert a structure back to json
 ###Cloning###
 
 You can also clone structures with cloneStructure or cloneStructureWithLinks that will connect the two so that clone is kept up to date
+
+###isPacket###
+
+check whether a value is a packet
+
+###makeFactory###
+
+Will take a stream type and return a function that will create new instance of that type for you
+
+###getPaths###
+
+Returns all the dot delimitted paths in a json (used by cloneWithLinks)
 
 ##Coming Soon##
 
