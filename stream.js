@@ -49,6 +49,38 @@ _.extend(NodeChangePacket, {
 	}
 });
 
+NodeRemovePacket = Object.create(Packet);
+_.extend(NodeRemovePacket, {
+	type: 'remove',
+	data: {
+		node: null
+	},
+	getValue: function() {
+		return this.data.node;
+	},
+	setValue: function(node) {
+		if (!this.hasOwnProperty('data'))
+			this.data = {};
+		this.data.node = node;
+	}
+});
+
+NodeAddPacket = Object.create(Packet);
+_.extend(NodeAddPacket, {
+	type: 'add',
+	data: {
+		node: null
+	},
+	getValue: function() {
+		return this.data.node;
+	},
+	setValue: function(node) {
+		if (!this.hasOwnProperty('data'))
+			this.data = {};
+		this.data.node = node;
+	}
+});
+
 BulkPacket = Object.create(Packet)
 _.extend(BulkPacket, {
 	type: 'BulkPacket',
@@ -328,11 +360,30 @@ _.extend(Node, {
 	getChild: function() {
 		return this;
 	},
-	getPath: function(node) {
-		var path = '.';
+	contains: function(child) {
+		var curr = child;
+		while (curr.getParent()) {
+			if (curr.getParent() == this)
+				return true;
+			curr = curr.getParent();
+		}
+		return false;
+	},
+	getPathTo: function(node) {
+		return node.getPath().substring(this.getPath().length + 1);
+	},
+	getPath: function() {
 		if (this.getParent())
-			path = this.getParent().getPath(this) + path;
-		return path;
+			var path = this.getParent().getPath(this);
+		return path.replace(/\.$/,'');
+	},
+	removeChild: function(child) {
+
+	},
+	dispose: function() {
+		if (this.getParent())
+			this.getParent().removeChild(this);
+		Stream.dispose.call(this);
 	}
 });
 
@@ -375,7 +426,15 @@ _.extend(ListDataNode, {
 		if (path.length && ret);
 			return ret.getChild(path.reverse().join('.'))
 		return ret;
-	}
+	},
+	getPath: function(child) {
+		if (!child)
+			return Node.getPath.call(this);
+		var name = this._list.indexOf(child) + '.';
+		if (this.getParent())
+			return this.getParent().getPath(this) + name;
+		return name;
+	},
 });
 
 /**
@@ -414,6 +473,17 @@ _.extend(MapDataNode, {
 			str.push(i + ' : ' + this._map[i]);
 		}
 		return '{ ' + str.join(' , ') + ' }'
+	},
+	getPath: function(child) {
+		if (!child)
+			return Node.getPath.call(this);
+		var name = '';
+		for (var i in this._map)
+			if (this._map[i] == child)
+				name = i + '.'
+		if (this.getParent())
+			return this.getParent().getPath(this) + name;
+		return name;
 	},
 	getChild: function(child) {
 		if (!child)
@@ -689,7 +759,7 @@ var json = {
 	c:'plop'
 };
 
-var nodes = JSONtoNodes(json)
+nodes = JSONtoNodes(json)
 
 console.log(''+nodes);
 console.log(NodesToJSON(nodes));
@@ -752,3 +822,5 @@ a.getChild('a').pipe(makeLogger(1));
 b.getChild('a').pipe(makeLogger(2));
 a.getChild('a').setVal(2);
 
+console.log(nodes.getChild('a.2').getPath())
+console.log(nodes.getChild('a').getPathTo(nodes.getChild('a.2.2')))
