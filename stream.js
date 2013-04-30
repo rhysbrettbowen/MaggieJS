@@ -19,11 +19,7 @@ Packet = {
 		var clone = Object.create(Object.getPrototypeOf(this));
 		for (var i in this) {
 			if (this.hasOwnProperty(i))
-				clone[i] = this[i];
-		}
-		clone.data = {};
-		for (i in this.data) {
-			clone.data[i] = this.data[i];
+				clone[i] = _.clone(this[i]);
 		}
 		return clone;
 	}
@@ -682,54 +678,54 @@ isPacket = function(obj) {
 	return false;
 };
 
-// a = Object.create(Stream).init();
-// b = Object.create(Stream).init();
-// c = Object.create(Buffer).init(3);
-// c.onData(function(val){console.log(val)});
+a = Object.create(Stream).init();
+b = Object.create(Stream).init();
+c = Object.create(Buffer).init(3);
+c.onData(function(val){console.log(val)});
 
-// var json = {
-// 	a: [1,2,[4,5,{a:9}]],
-// 	b: {r:3},
-// 	c:'plop'
-// };
+var json = {
+	a: [1,2,[4,5,{a:9}]],
+	b: {r:3},
+	c:'plop'
+};
 
-// var nodes = JSONtoNodes(json)
+var nodes = JSONtoNodes(json)
 
-// console.log(''+nodes);
-// console.log(NodesToJSON(nodes));
+console.log(''+nodes);
+console.log(NodesToJSON(nodes));
 
-// console.log(''+nodes.getChild('a.2.2'));
-// var copy = cloneWithLinks(nodes);
+console.log(''+nodes.getChild('a.2.2'));
+var copy = cloneWithLinks(nodes);
 
-// getAdder = makeFactory(Transform, function(a) {
-// 	return a + 1;
-// });
-// getLogger = makeFactory(Log);
-// filter = Object.create(Filter)
-// filter.init(function(a) {return _.isNumber(a)})
-// flatten = Object.create(Transform)
-// flatten.init(function(arr){return _.flatten(arr).join('')})
-// add = Object.create(Transform)
-// add.init(function(a) {return a + 1});
-// log = Object.create(Log)
-// log.init()
-// buff = Object.create(Buffer);
-// buff.init(3)
-// nodes.getChild('c').pipe(getAdder()).pipe(getAdder()).pipe(getLogger())
-// nodes.getChild('c').setVal(1)
-// nodes.getChild('c').setVal(2)
-// nodes.getChild('c').setVal(3)
-// a = getAdder();
-// b = getAdder();
-// c = getAdder();
-// d = getLogger()
-// b.pipe(d)
-// b.setVal(8)
-// e = Plumber.weld(a,b,c)
-// e.setVal(1);
-// a.setVal(1);
-// b.setVal(1);
-// c.setVal(1);
+getAdder = makeFactory(Transform, function(a) {
+	return a + 1;
+});
+getLogger = makeFactory(Log);
+filter = Object.create(Filter)
+filter.init(function(a) {return _.isNumber(a)})
+flatten = Object.create(Transform)
+flatten.init(function(arr){return _.flatten(arr).join('')})
+add = Object.create(Transform)
+add.init(function(a) {return a + 1});
+log = Object.create(Log)
+log.init()
+buff = Object.create(Buffer);
+buff.init(3)
+nodes.getChild('c').pipe(getAdder()).pipe(getAdder()).pipe(getLogger())
+nodes.getChild('c').setVal(1)
+nodes.getChild('c').setVal(2)
+nodes.getChild('c').setVal(3)
+a = getAdder();
+b = getAdder();
+c = getAdder();
+d = getLogger()
+b.pipe(d)
+b.setVal(8)
+e = Plumber.weld(a,b,c)
+e.setVal(1);
+a.setVal(1);
+b.setVal(1);
+c.setVal(1);
 
 LogIt = Object.create(Stream);
 _.extend(LogIt, {
