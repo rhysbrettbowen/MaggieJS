@@ -49,35 +49,74 @@ _.extend(NodeChangePacket, {
 	}
 });
 
-NodeRemovePacket = Object.create(Packet);
-_.extend(NodeRemovePacket, {
-	type: 'remove',
+NodeMutatePacket = Object.create(Packet);
+_.extend(NodeMutatePacket, {
+	getValue: function(type) {
+		if (!Node.isPrototypeOf(type))
+			return;
+		return this.getValue_();
+	},
+	getValue_: function() {}
+});
+
+NodeDisposePacket = Object.create(NodeMutatePacket);
+_.extend(NodeDisposePacket, {
+	type: 'dispose',
 	data: {
 		node: null
 	},
-	getValue: function() {
+	getValue_: function(channel) {
 		return this.data.node;
 	},
 	setValue: function(node) {
+		if (this.data.node)
+			return;
 		if (!this.hasOwnProperty('data'))
 			this.data = {};
 		this.data.node = node;
 	}
 });
 
-NodeAddPacket = Object.create(Packet);
+NodeRemovePacket = Object.create(NodeMutatePacket);
+_.extend(NodeRemovePacket, {
+	type: 'remove',
+	data: {
+		node: null
+	},
+	getValue_: function() {
+		return this.data.node;
+	},
+	setValue: function(node) {
+		if (this.data.node)
+			return;
+		if (!this.hasOwnProperty('data'))
+			this.data = {};
+		this.data.node = node;
+	}
+});
+
+NodeAddPacket = Object.create(NodeMutatePacket);
 _.extend(NodeAddPacket, {
 	type: 'add',
 	data: {
 		node: null
 	},
-	getValue: function() {
-		return this.data.node;
+	getValue_: function() {
+		return this.data.parent;
 	},
-	setValue: function(node) {
+	getParent: function() {
+		return this.data.parent;
+	},
+	getChild: function() {
+		return this.data.child;
+	},
+	setValue: function(parent, child) {
+		if (this.data.parent)
+			return;
 		if (!this.hasOwnProperty('data'))
 			this.data = {};
-		this.data.node = node;
+		this.data.parent = parent;
+		this.data.child = child;
 	}
 });
 
@@ -117,7 +156,12 @@ _.extend(ChannelPacket, {
 	},
 	getChannel: function(channel) {
 		return this.channel;
-	}
+	},
+	getValue: function(value, channel) {
+		if (channel == this.channel)
+			return this.data;
+	},
+
 });
 
 /**
@@ -152,10 +196,19 @@ Stream = {
 		return val;
 	},
 	setVal: function(val) {
-		this.send(this.transform(this.convertToPacket(val)));
+		val = this.convertToPacket(val);
+		if (val.getValue(this) == null)
+			this.send(val);
+		else
+			this.setVal_(val);
+	},
+
+	setVal_: function(val) {
+		this.send(this.transform(val));
 	},
 	transform: function(val) {
-		return val;
+		if (val.getValue() == null)
+			return val;
 	},
 	send: function(val) {
 		if (!val)
@@ -174,7 +227,7 @@ _.extend(WeldedStream, {
 		this.streams = [].slice.call(arguments, 0);
 		var streams = this.streams;
 		for (var i = 0; i < this.streams.length - 1; i++) {
-			this.streams[i].setVal_ = this.streams[i].setVal;
+			this.streams[i].setVal__ = this.streams[i].setVal;
 			this.streams[i].setVal = _.bind(this.setVal, this);
 			this.streams[i].send = (function(i) {
 				return function(val) {
@@ -183,12 +236,12 @@ _.extend(WeldedStream, {
 				};
 			})(i);
 		}
-		this.streams[i].setVal_ = this.streams[i].setVal;
+		this.streams[i].setVal__ = this.streams[i].setVal;
 		this.streams[i].setVal = _.bind(this.setVal, this);
 		streams[streams.length - 1].send = _.bind(this.send, this);
 	},
 	setVal: function(val) {
-		this.streams[0].setVal_(val);
+		this.streams[0].setVal__(val);
 	},
 	dispose: function() {
 		for (var i = 0; i < this.streams.length; i++)
@@ -349,6 +402,10 @@ _.extend(Node, {
 		Stream.init.call(this);
 		this._parent = null;
 	},
+	mirror: function(node) {
+		this.mirrors_ = this.mirrors_ || [];
+		this.mirrors_.push(node);
+	},
 	setParent: function(parent) {
 		if (this._parent)
 			this._parent.removeChild(this);
@@ -369,6 +426,27 @@ _.extend(Node, {
 		}
 		return false;
 	},
+	setVal: function(val) {
+		if (NodeMutatePacket.isPrototypeOf(val) &&
+				_.contains(this.mirrors_, val.getValue())) {
+			if (NodeRemovePacket.isPrototypeOf(val))
+				this.remove();
+			if (NodeDisposePacket.isPrototypeOf(val)) {
+				Stream.setVal.call(this, val);
+				this.dispose();
+				return;
+			}
+			if (NodeAddPacket.isPrototypeOf(val)) {
+				var child = val.getChild();
+				var clone = child.clone();
+				var path = val.getValue().getPathTo(child);
+				this.addChild(clone, path);
+				child.pipe(clone);
+				clone.mirror(child);
+			}
+		}
+		Stream.setVal.call(this, val);
+	},
 	getPathTo: function(node) {
 		return node.getPath().substring(this.getPath().length + 1);
 	},
@@ -377,12 +455,20 @@ _.extend(Node, {
 			var path = this.getParent().getPath(this);
 		return path.replace(/\.$/,'');
 	},
-	removeChild: function(child) {
-
+	remove: function(node) {
+		if (this.getParent() && this.getParent().removeChild)
+			this.getParent().removeChild(this);
+		this.setParent(null);
+		var rpacket = Object.create(NodeRemovePacket);
+		rpacket.setValue(node);
+		this.send(rpacket);
 	},
 	dispose: function() {
 		if (this.getParent())
 			this.getParent().removeChild(this);
+		var dpacket = Object.create(NodeDisposePacket);
+		dpacket.setValue(this);
+		this.send(dpacket);
 		Stream.dispose.call(this);
 	}
 });
@@ -400,12 +486,11 @@ _.extend(ListDataNode, {
 	addChild: function(node,  index) {
 		if (index == null)
 			index = this._list.length;
-		this._list.splice(index, 0, node);
+		this._list.splice(+index, 0, node);
 		node.setParent(this);
-		this.give(_.extend(Object.create(Packet), {
-			type: 'addNode',
-			data: node
-		}));
+		var packet = Object.create(NodeAddPacket);
+		packet.setValue(this, node);
+		this.send(packet);
 	},
 	removeChild: function(node) {
 		if (!_.isNumber(node)) {
@@ -435,6 +520,12 @@ _.extend(ListDataNode, {
 			return this.getParent().getPath(this) + name;
 		return name;
 	},
+	dispose: function() {
+		_each(this._list, function(child) {
+			child.dispose();
+		});
+		Node.dispose.call(this);
+	}
 });
 
 /**
@@ -545,6 +636,8 @@ _.extend(Buffer, {
 		return arr.join('');
 	},
 	transform: function(val) {
+		if (val.getValue() == null)
+			return val;
 		this._buffer.addValue(val);
 		if (this._buffer.length >= this._maxLength) {
 			var send = this._buffer;
@@ -561,7 +654,8 @@ _.extend(Buffer, {
 Log = Object.create(Stream);
 _.extend(Log, {
 	setVal: function(val) {
-		console.log(val.getValue());
+		if (val.getValue() != null)
+			console.log(val.getValue());
 		Stream.setVal.call(this, val);
 	}
 });
@@ -577,7 +671,7 @@ _.extend(Filter, {
 		return Stream.init.call(this);
 	},
 	transform: function(val) {
-		if (this._filter(val))
+		if (val.getValue() == null || this._filter(val))
 			return val;
 	}
 });
@@ -593,6 +687,8 @@ _.extend(Transform, {
 		return Stream.init.call(this);
 	},
 	transform: function(val) {
+		if (val.getValue() == null)
+			return val;
 		val.setValue(this._transform(val.getValue()));
 		return val;
 	}
@@ -605,7 +701,7 @@ _.extend(Transform, {
 Debounce = Object.create(Stream);
 _.extend(Debounce, {
 	init: function(time) {
-		this.setVal = _.debounce(Stream.setVal, time);
+		this.setVal_ = _.debounce(Stream.setVal_, time);
 		return Stream.init.call(this);
 	}
 });
@@ -613,7 +709,7 @@ _.extend(Debounce, {
 Throttle = Object.create(Stream);
 _.extend(Throttle, {
 	init: function(time) {
-		this.setVal = _.throttle(Stream.setVal, time);
+		this.setVal_ = _.throttle(Stream.setVal_, time);
 		return Stream.init.call(this);
 	}
 });
@@ -621,13 +717,15 @@ _.extend(Throttle, {
 Defer = Object.create(Stream);
 _.extend(Defer, {
 	init: function(time) {
-		this.time = time;
+		this.setTime(time);
 		return Stream.init.call(this);
 	},
-	setVal: function() {
-		var args = _.toArray(arguments);
+	setTime: function(time) {
+		this.time = time;
+	},
+	setVal_: function(val) {
 		_.delay(_.bind(function() {
-			Stream.setVal.apply(this, args);
+			Stream.setVal_.apply(this, val);
 		}, this), this.time);
 	}
 });
@@ -635,7 +733,7 @@ _.extend(Defer, {
 Split = Object.create(Stream);
 _.extend(Split, {
 	transform: function(val) {
-		if (_.isArray(val.getValue())) {
+		if (val.getValue() != null && _.isArray(val.getValue())) {
 			_.each(val.getValue(), Stream.setVal, this);
 		} else {
 			return val;
@@ -753,6 +851,7 @@ cloneWithLinks = function(node) {
 	var head = JSONtoNodes(json);
 	_.each(getPaths(json), function(path) {
 		node.getChild(path).pipe(head.getChild(path));
+		head.getChild(path).cloned = node.getChild(path);
 	});
 	return head;
 };
@@ -874,9 +973,35 @@ makeLeaf = makeFactory(Leaf);
 var inputs = document.getElementsByTagName('INPUT');
 
 var l = makeLeaf(inputs[0]);
-var l2 = makeLeaf(inputs[1]);
+var la = makeLeaf(inputs[1]);
+var lb = makeLeaf(inputs[2]);
+var l2 = makeLeaf(inputs[3]);
 
 var makeDefer = makeFactory(Defer);
 
+
+
+var Pauser = Object.create(Stream);
+_.extend(Pauser, {
+	pause: function() {
+		this.paused = !this.paused;
+	},
+	setVal: function(val) {
+		if (!this.paused)
+			Stream.setVal.call(this, val);
+	}
+});
+
+var pauser = Object.create(Pauser);
+pauser.init();
+
 l.pipe(makeDefer(1000)).pipe(getAdder()).pipe(l);
-l.pipe(getAdder()).pipe(l2);
+la.pipe(makeDefer(1000)).pipe(getAdder()).pipe(la);
+lb.pipe(makeDefer(1000)).pipe(getAdder()).pipe(lb);
+l.pipe(pauser).pipe(l2);
+la.pipe(pauser).pipe(l2);
+lb.pipe(pauser).pipe(l2);
+
+document.getElementById('pause').addEventListener('click', function() {
+	pauser.pause();
+});
