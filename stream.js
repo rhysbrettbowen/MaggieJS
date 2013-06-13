@@ -851,7 +851,7 @@ cloneWithLinks = function(node) {
 	var head = JSONtoNodes(json);
 	_.each(getPaths(json), function(path) {
 		node.getChild(path).pipe(head.getChild(path));
-		head.getChild(path).cloned = node.getChild(path);
+		head.getChild(path).mirror(node.getChild(path));
 	});
 	return head;
 };
@@ -1005,3 +1005,8 @@ lb.pipe(pauser).pipe(l2);
 document.getElementById('pause').addEventListener('click', function() {
 	pauser.pause();
 });
+
+a = JSONtoNodes({a: [0,1,2]})
+b = cloneWithLinks(a);
+a.getChild('a').addChild(JSONtoNodes(3));
+console.log(''+a, ''+b);
