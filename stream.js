@@ -207,7 +207,7 @@ Stream = {
 		this.send(this.transform(val));
 	},
 	transform: function(val) {
-		if (val.getValue() == null)
+		if (val.getValue() != null)
 			return val;
 	},
 	send: function(val) {
@@ -725,7 +725,7 @@ _.extend(Defer, {
 	},
 	setVal_: function(val) {
 		_.delay(_.bind(function() {
-			Stream.setVal_.apply(this, val);
+			Stream.setVal_.call(this, val);
 		}, this), this.time);
 	}
 });
